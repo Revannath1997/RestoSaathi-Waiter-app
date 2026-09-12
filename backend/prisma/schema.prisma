@@ -1,0 +1,256 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Restaurant {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  phone     String
+  address   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branches      Branch[]
+  waiterCodes   WaiterSignupCode[]
+  orders        Order[]
+  menuItems     MenuItem[]
+  menuUploads   MenuCardUpload[]
+  menuProcessing MenuProcessing[]
+}
+
+model Branch {
+  id            String   @id @default(cuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id])
+  name          String
+  address       String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  waiters       Waiter[]
+  tables        Table[]
+
+  @@index([restaurantId])
+}
+
+model WaiterSignupCode {
+  id            String   @id @default(cuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id])
+  code          String   @unique
+  branchId      String
+  isUsed        Boolean  @default(false)
+  expiresAt     DateTime
+  createdAt     DateTime @default(now())
+
+  @@index([restaurantId])
+  @@index([code])
+}
+
+model Waiter {
+  id          String   @id @default(cuid())
+  branchId    String
+  branch      Branch   @relation(fields: [branchId], references: [id])
+  fullName    String
+  phone       String   @unique
+  password    String
+  email       String?
+  profilePhoto String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orders      Order[]
+  sessions    WaiterSession[]
+  menuUploads MenuCardUpload[]
+
+  @@index([branchId])
+  @@index([phone])
+}
+
+model WaiterSession {
+  id        String   @id @default(cuid())
+  waiterId  String
+  waiter    Waiter   @relation(fields: [waiterId], references: [id])
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([waiterId])
+  @@index([token])
+}
+
+model MenuItem {
+  id            String   @id @default(cuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id])
+  name          String
+  description   String?
+  price         Float
+  category      String
+  image         String?
+  isAvailable   Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  orderItems    OrderItem[]
+  processedItems ProcessedMenuItem[]
+
+  @@index([restaurantId])
+  @@index([category])
+}
+
+model Table {
+  id        String   @id @default(cuid())
+  branchId  String
+  branch    Branch   @relation(fields: [branchId], references: [id])
+  tableNumber Int
+  capacity  Int
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders    Order[]
+
+  @@unique([branchId, tableNumber])
+  @@index([branchId])
+}
+
+model Order {
+  id            String   @id @default(cuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id])
+  waiterId      String
+  waiter        Waiter   @relation(fields: [waiterId], references: [id])
+  tableId       String
+  table         Table    @relation(fields: [tableId], references: [id])
+
+  orderNumber   String   @unique
+  status        OrderStatus @default(PENDING)
+  subtotal      Float
+  tax           Float
+  total         Float
+  specialNotes  String?
+  voiceOrderUrl String?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  sentToKitchenAt DateTime?
+  completedAt   DateTime?
+
+  items         OrderItem[]
+  notifications OrderNotification[]
+
+  @@index([restaurantId])
+  @@index([waiterId])
+  @@index([tableId])
+  @@index([status])
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id])
+  menuItemId String
+  menuItem  MenuItem @relation(fields: [menuItemId], references: [id])
+
+  quantity  Int
+  price     Float
+  notes     String?
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([menuItemId])
+}
+
+model OrderNotification {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id])
+
+  type      NotificationType
+  message   String
+  sentAt    DateTime @default(now())
+  readAt    DateTime?
+
+  @@index([orderId])
+}
+
+enum OrderStatus {
+  PENDING
+  SENT_TO_KITCHEN
+  PREPARING
+  READY
+  SERVED
+  COMPLETED
+  CANCELLED
+}
+
+enum NotificationType {
+  KITCHEN_RECEIVED
+  MANAGER_NOTIFIED
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+model MenuCardUpload {
+  id            String   @id @default(cuid())
+  restaurantId  String
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id])
+  branchId      String
+  waiterId      String
+  waiter        Waiter   @relation(fields: [waiterId], references: [id])
+  imagePath     String
+  filename      String
+  originalName  String
+  fileSize      Int
+  mimeType      String
+  uploadedAt    DateTime @default(now())
+
+  processing    MenuProcessing[]
+
+  @@index([restaurantId])
+  @@index([waiterId])
+}
+
+model MenuProcessing {
+  id              String   @id @default(cuid())
+  uploadId        String
+  upload          MenuCardUpload @relation(fields: [uploadId], references: [id])
+  restaurantId    String
+  restaurant      Restaurant @relation(fields: [restaurantId], references: [id])
+  status          String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  itemsExtracted  Int      @default(0)
+  startedAt       DateTime @default(now())
+  completedAt     DateTime?
+  errorMessage    String?
+
+  processedItems  ProcessedMenuItem[]
+
+  @@index([restaurantId])
+  @@index([uploadId])
+}
+
+model ProcessedMenuItem {
+  id                String   @id @default(cuid())
+  processingId      String
+  processing        MenuProcessing @relation(fields: [processingId], references: [id])
+  menuItemId        String
+  menuItem          MenuItem @relation(fields: [menuItemId], references: [id])
+  extractedName     String
+  extractedPrice    Float
+  extractedCategory String
+  confidence        Float    @default(90)
+  createdAt         DateTime @default(now())
+
+  @@index([processingId])
+  @@index([menuItemId])
+}
